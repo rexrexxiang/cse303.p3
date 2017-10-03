@@ -12,7 +12,18 @@
  *
  */
 
+extern struct fat{
 
+} fat;
 
+extern struct rootSector{
+  char* fatPtr;
+  char* rootDir;
+} rootSector;
+
+extern struct directoryPage{
+
+  
+} directoryPage;
 
 #endif

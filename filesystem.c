@@ -41,8 +41,8 @@ void filesystem(char *file)
 	 * open file, handle errors, create it if necessary.
 	 * should end up with map referring to the filesystem.
 	 */
-    int *fp = open(file, O_RDWR | O_CREAT);
-    map = mmap((caddr_t)0, pagesize, PROT_READ, MAP_SHARED, fd, pagesize);
+	int *fp = open(file, O_RDWR | O_CREAT);
+	map = mmap((caddr_t)0, 4194304, PROT_READ | PROT_WRITE, MAP_SHARED, fp, 0);
     
 	/* You will probably want other variables here for tracking purposes */
 
