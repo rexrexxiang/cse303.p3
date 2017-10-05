@@ -1,5 +1,6 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
+#include <time.h>
 
 /*
  *
@@ -11,19 +12,31 @@
  * You will have 8K pages total.
  *
  */
-
-extern struct fat{
-
-} fat;
+extern struct filesystem{
+  struct rootSector;
+  FILE* file;
+} filesystem;
 
 extern struct rootSector{
-  char* fatPtr;
-  char* rootDir;
+  int FATroot;
+  int rootDirectory;
 } rootSector;
 
-extern struct directoryPage{
+extern struct directoryEntry{
+  int index;
+  char *name;
+  time_t timeCreated;
+  int size;
+} directoryEntry;
 
-  
+extern struct fatEntry{
+  struct fatEntry *nextEntry;
+} fatEntry;
+
+extern struct directoryPage{  
+  int thisDirectory;
+  int previousDirectory;
+  struct directoryEntry **directories;
 } directoryPage;
 
 #endif
