@@ -28,6 +28,121 @@ char* generateData(char *source, size_t size)
 	return retval;
 }
 
+void verifyFileSystem(char *file)
+{
+    printf("Verify of File System:\n");
+    rootSector test_sector;
+    int fp = open(file, O_RDWR);
+    read(fp, &test_sector, sizeof(test_sector));
+    
+    printf("Start of FAT: %d\nStart of root Directory: %d\n\n", test_sector.FATroot, test_sector.rootDirectory);
+}
+
+void fat_error(char *message){
+    printf("%s\n", message);
+    exit(-1);
+}
+
+void dump(char *file, int pagenumber)
+{
+    unsigned char out[512];
+    int i;
+    int fp = open(file, O_RDWR);
+    
+    if (pagenumber < 0 || pagenumber > 8192){
+        fat_error("ERROR: page outside filesystem!");
+    }
+    
+    lseek(fp, 0 + 512 * pagenumber, SEEK_SET);
+
+    read(fp, &out, sizeof(out));
+    
+    for(i = 0; i < 512; i++){
+        if (i > 0 && i % 16 == 0){
+           printf("    "); 
+        }
+        
+        if (i > 0 && i % 32 == 0){
+           printf("\n"); 
+        }
+        printf("%02x ", out[i]);
+    } 
+    printf("\n");
+}
+
+void usage (char *file)
+{
+    rootSector test_sector;
+    char use;
+    int fp = open(file, O_RDWR);
+    read(fp, &test_sector, sizeof(test_sector));
+    
+    lseek(fp, test_sector.FATroot, SEEK_SET);
+    int i;
+    int total_file_size = 0;
+    int total_system_size = 0;
+    
+    fatEntry fat_entry;
+    for (i = 0; i < 8129 - 63 * 2; i++){
+        read(fp, &fat_entry, sizeof(fat_entry));
+        if (fat_entry.use == 1){
+            total_file_size += 512;
+        }else{
+            total_file_size += 0;
+        }
+        lseek(fp, 512 + (i + 1) * sizeof(fat_entry), SEEK_SET);
+    }
+    
+    close(fp);
+    fp = open(file, O_RDWR);
+    for (i = 0; i < 4194304; i++){
+        read(fp, &use, sizeof(use));
+        if (use != '\0'){
+            total_system_size += 1;
+        }
+        lseek(fp, i + 1, SEEK_SET);
+    }
+    
+    printf("Total actual files used: %d byte\n", total_file_size);
+    printf("Total filesystem used: %d byte\n", total_system_size);
+}
+
+void filesystem_init(char* file)
+{
+    int filesize = 4194304;
+    int fp, i;
+    
+    fp = open(file, O_RDWR | O_CREAT);
+    
+    if (fp < 0){
+        printf("open error\n");
+		exit(-1);
+	}
+    
+    ftruncate(fp, filesize);
+    rootSector root_sector;
+    root_sector.FATroot = 512;
+    root_sector.rootDirectory = 512 + 512 * 63;
+    
+    write(fp, &root_sector, sizeof(root_sector));
+    lseek(fp, 513, SEEK_SET);
+    
+    fatEntry fat_entry;
+
+    
+    for (i = 0; i < 8129 - 63 * 2; i++){
+        write(fp, &fat_entry, sizeof(fat_entry));
+        lseek(fp, 512 + (i + 1) * sizeof(fat_entry), SEEK_SET);
+    }
+    
+    directoryEntry directory_entry;
+    directory_entry.index = 512 + 512 * 63 * 2;
+    directory_entry.name = "root";
+    
+    lseek(fp, 512 + 512 * 63 * 2, SEEK_SET);
+    write(fp, &directory_entry, sizeof(directory_entry));
+    close(fp);
+}
 /*
  * filesystem() - loads in the filesystem and accepts commands
  */
@@ -41,15 +156,11 @@ void filesystem(char *file)
 	 * open file, handle errors, create it if necessary.
 	 * should end up with map referring to the filesystem.
 	 */
-    fp = open(file, O_RDWR | O_CREAT);
-    
-    if (fp < 0){
-        printf("open error\n");
-		exit(-1);
-	}
-    
-    ftruncate(fp, filesize);
 
+
+    filesystem_init(file);
+    
+    fp = open(file, O_RDWR);
     map = mmap(NULL, filesize, PROT_READ|PROT_WRITE, MAP_SHARED, fp, 0);
 
     if (map == MAP_FAILED){
@@ -57,30 +168,11 @@ void filesystem(char *file)
         exit(-1);;
     }
     
+    close(fp);
     
 	/* You will probably want other variables here for tracking purposes */
-    
-    rootSector root_sector;
-    root_sector.FATroot = 512;
-    root_sector.rootDirectory = 512 + 512 * 63;
-    
-    struct directoryEntry directiory_entry;
-    struct fatEntry fat_entry;
-    struct directoryPage directory_page;
-    
-    rootSector test_sector;
-    
-    printf("%ld %ld\n", sizeof(root_sector), sizeof(test_sector));
-    
-    write(fp, &root_sector, sizeof(root_sector));
-    
-    close(fp);
-    fp = open(file, O_RDWR | O_CREAT);
-    read(fp, &test_sector, sizeof(test_sector));
-    
-    printf("%d %d\n", test_sector.FATroot, test_sector.rootDirectory);
-    printf("%d %d\n", root_sector.FATroot, root_sector.rootDirectory);
-    printf("%d", test_sector.FATroot == root_sector.FATroot);
+
+    verifyFileSystem(file);
     
 	/*
 	 * Accept commands, calling accessory functions unless
@@ -95,7 +187,7 @@ void filesystem(char *file)
 		size_t length = strlen(buffer);
 		if(length == 0)
 		{
-			continue;
+            continue;
 		}
 		if(buffer[length-1] == '\n')
 		{
@@ -115,7 +207,7 @@ void filesystem(char *file)
 		{
 			if(isdigit(buffer[5]))
 			{
-				//dump(stdout, atoi(buffer + 5));
+				dump(file, atoi(buffer + 5));
 			}
 			else
 			{
@@ -128,7 +220,7 @@ void filesystem(char *file)
 		}
 		else if(!strncmp(buffer, "usage", 5))
 		{
-			//usage();
+			usage(file);
 		}
 		else if(!strncmp(buffer, "pwd", 3))
 		{

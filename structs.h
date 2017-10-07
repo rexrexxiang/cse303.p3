@@ -17,21 +17,22 @@ typedef struct{
   int rootDirectory;
 }rootSector;
 
-struct directoryEntry{
+typedef struct{
   int index;
   char *name;
   time_t timeCreated;
   int size;
-} ;
+}directoryEntry;
 
-struct fatEntry{
-  struct fatEntry *nextEntry;
-} ;
+typedef struct{
+  int use;
+  int next;
+}fatEntry;
 
-struct directoryPage{  
+typedef struct{  
   int thisDirectory;
   int previousDirectory;
   struct directoryEntry **directories;
-} ;
+}directoryPage;
 
 #endif
