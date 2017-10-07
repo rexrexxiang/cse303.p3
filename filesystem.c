@@ -28,7 +28,6 @@ char* generateData(char *source, size_t size)
 	return retval;
 }
 
-
 /*
  * filesystem() - loads in the filesystem and accepts commands
  */
@@ -36,16 +35,34 @@ void filesystem(char *file)
 {
 	/* pointer to the memory-mapped filesystem */
 	char *map = NULL;
-
+	int filesize = 4194304;
+    int fp;
 	/*
 	 * open file, handle errors, create it if necessary.
 	 * should end up with map referring to the filesystem.
 	 */
-    int *fp = open(file, O_RDWR | O_CREAT);
-    map = mmap((caddr_t)0, pagesize, PROT_READ, MAP_SHARED, fd, pagesize);
+    fp = open(file, O_RDWR | O_CREAT);
     
-	/* You will probably want other variables here for tracking purposes */
+    if (fp < 0){
+        printf("open error\n");
+		exit(-1);
+	}
+    
+    ftruncate(fp, filesize);
 
+    map = mmap(NULL, filesize, PROT_READ|PROT_WRITE, MAP_SHARED, fp, 0);
+
+    if (map == MAP_FAILED){
+        printf("map error\n");
+        exit(-1);;
+    }
+	/* You will probably want other variables here for tracking purposes */
+    
+    struct rootSector* rootSector;
+    rootSector->FATroot = 512;
+    rootSector->rootDirectory = 512 + 512 * 63;
+    
+    write(fp, rootSector, 512);
 
 	/*
 	 * Accept commands, calling accessory functions unless
