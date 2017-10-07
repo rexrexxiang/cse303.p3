@@ -56,9 +56,11 @@ void filesystem(char *file)
         printf("map error\n");
         exit(-1);;
     }
+    
+    
 	/* You will probably want other variables here for tracking purposes */
     
-    struct rootSector root_sector;
+    rootSector root_sector;
     root_sector.FATroot = 512;
     root_sector.rootDirectory = 512 + 512 * 63;
     
@@ -66,13 +68,19 @@ void filesystem(char *file)
     struct fatEntry fat_entry;
     struct directoryPage directory_page;
     
-    close(fp);
+    rootSector test_sector;
     
-    FILE * fd = fopen(file, "wr");
-    fwrite(&root_sector, sizeof(root_sector), 1, fd);
-    fread(&root_sector, sizeof(root_sector), 1, fd);
-    printf("%d\n", root_sector.FATroot);
-    printf("%d\n", root_sector.rootDirectory);
+    printf("%ld %ld\n", sizeof(root_sector), sizeof(test_sector));
+    
+    write(fp, &root_sector, sizeof(root_sector));
+    
+    close(fp);
+    fp = open(file, O_RDWR | O_CREAT);
+    read(fp, &test_sector, sizeof(test_sector));
+    
+    printf("%d %d\n", test_sector.FATroot, test_sector.rootDirectory);
+    printf("%d %d\n", root_sector.FATroot, root_sector.rootDirectory);
+    printf("%d", test_sector.FATroot == root_sector.FATroot);
     
 	/*
 	 * Accept commands, calling accessory functions unless
