@@ -58,12 +58,22 @@ void filesystem(char *file)
     }
 	/* You will probably want other variables here for tracking purposes */
     
-    struct rootSector* rootSector;
-    rootSector->FATroot = 512;
-    rootSector->rootDirectory = 512 + 512 * 63;
+    struct rootSector root_sector;
+    root_sector.FATroot = 512;
+    root_sector.rootDirectory = 512 + 512 * 63;
     
-    write(fp, rootSector, 512);
-
+    struct directoryEntry directiory_entry;
+    struct fatEntry fat_entry;
+    struct directoryPage directory_page;
+    
+    close(fp);
+    
+    FILE * fd = fopen(file, "wr");
+    fwrite(&root_sector, sizeof(root_sector), 1, fd);
+    fread(&root_sector, sizeof(root_sector), 1, fd);
+    printf("%d\n", root_sector.FATroot);
+    printf("%d\n", root_sector.rootDirectory);
+    
 	/*
 	 * Accept commands, calling accessory functions unless
 	 * user enters "quit"

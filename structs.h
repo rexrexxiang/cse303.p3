@@ -12,10 +12,10 @@
  * You will have 8K pages total.
  *
  */
-struct rootSector{
+extern struct rootSector{
   int FATroot;
   int rootDirectory;
-};
+}rootSector;
 
 struct directoryEntry{
   int index;
