@@ -18,10 +18,11 @@ typedef struct{
 }rootSector;
 
 typedef struct{
-  int index;
+  short prev;
+  short current;
+  short index;
   char *name;
-  time_t timeCreated;
-  int size;
+  short size;
 }directoryEntry;
 
 typedef struct{

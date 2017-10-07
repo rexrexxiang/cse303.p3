@@ -136,8 +136,10 @@ void filesystem_init(char* file)
     }
     
     directoryEntry directory_entry;
+    printf("%ld\n", sizeof(directory_entry));
     directory_entry.index = 512 + 512 * 63 * 2;
     directory_entry.name = "root";
+    printf("%ld\n", sizeof(directory_entry));
     
     lseek(fp, 512 + 512 * 63 * 2, SEEK_SET);
     write(fp, &directory_entry, sizeof(directory_entry));
@@ -152,6 +154,7 @@ void filesystem(char *file)
 	char *map = NULL;
 	int filesize = 4194304;
     int fp;
+    int current = 0;
 	/*
 	 * open file, handle errors, create it if necessary.
 	 * should end up with map referring to the filesystem.
