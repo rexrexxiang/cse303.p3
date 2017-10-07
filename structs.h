@@ -12,6 +12,7 @@
  * You will have 8K pages total.
  *
  */
+
 extern struct filesystem{
   struct rootSector;
   FILE* file;
@@ -30,7 +31,8 @@ extern struct directoryEntry{
 } directoryEntry;
 
 extern struct fatEntry{
-  struct fatEntry *nextEntry;
+  int nextEntry; //index of next entry, -1 means EOF
+  int inUse; // 1 means yes, 0 means no
 } fatEntry;
 
 extern struct directoryPage{  
