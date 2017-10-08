@@ -12,33 +12,28 @@
  * You will have 8K pages total.
  *
  */
-
-extern struct filesystem{
-  struct rootSector;
-  FILE* file;
-} filesystem;
-
-extern struct rootSector{
+struct rootSector{
   int FATroot;
   int rootDirectory;
-} rootSector;
+};
 
-extern struct directoryEntry{
+//This represents a directory listing on a directory page
+//It is just a name - index pair
+struct directoryEntry{
+  char* name;
   int index;
+};
+
+struct fatEntry{
+  int use;
+  int next;
+};
+
+struct directoryPage{
   char *name;
-  time_t timeCreated;
-  int size;
-} directoryEntry;
-
-extern struct fatEntry{
-  int nextEntry; //index of next entry, -1 means EOF
-  int inUse; // 1 means yes, 0 means no
-} fatEntry;
-
-extern struct directoryPage{  
-  int thisDirectory;
-  int previousDirectory;
-  struct directoryEntry **directories;
-} directoryPage;
+  int thisDirectory; //index in fat
+  int previousDirectory; //index in fat
+  struct directoryEntry directories[50];
+};
 
 #endif

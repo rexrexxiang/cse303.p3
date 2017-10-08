@@ -12,6 +12,13 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
+int lastAllocated;
+int fatStart;
+int rootDirectory;
+int dataStart;
+int currentDirectory;
+int fp;
+
 /*
  * generateData() - Converts source from hex digits to
  * binary data. Returns allocated pointer to data
@@ -28,6 +35,56 @@ char* generateData(char *source, size_t size)
 	return retval;
 }
 
+void verifyFileSystem(char *file)
+{
+    printf("Verify of File System:\n");
+    struct rootSector test_sector;
+    int fp = open(file, O_RDWR);
+    read(fp, &test_sector, sizeof(test_sector));
+
+    printf("Start of FAT: %d\nStart of root Directory: %d\n\n", test_sector.FATroot, test_sector.rootDirectory);
+}
+
+void fat_error(char *message){
+    printf("%s\n", message);
+    exit(-1);
+}
+
+//returns an index, not a byte number
+// ** so you would have to multiple the index by 8 before lseek, write, read
+int getNextFreeBlock(){
+    int i = lastAllocated + 8;
+
+    while (1){
+        struct fatEntry block;
+        lseek(fp, i, SEEK_SET);
+        read(fp, &block, sizeof(block));
+        if (block.use == 0){
+            //if the block is not in use, we are going to return its index.
+            lastAllocated = i/8;
+            return i/8;
+            exit(1);
+        } else {
+            i += 8;
+            if (i > 124 * 8){ //If we go past the last page in the FAT, reset it to 0
+                i = 512; //512 is the start of the fat
+            }
+        }
+    }
+}
+
+//sets 'use' field of block at given index to 1
+//index means index, not byte
+void setBlockInUse(int index){
+    index = index * 8;
+    struct fatEntry block;
+    lseek(fp, index, SEEK_SET);
+    read(fp, &block, sizeof(block));
+    block.use = 1;
+    lseek(fp, index, SEEK_SET);
+    write(fp, &block, sizeof(block));
+}
+
 
 /*
  * filesystem() - loads in the filesystem and accepts commands
@@ -36,22 +93,27 @@ void filesystem(char *file)
 {
 	/* pointer to the memory-mapped filesystem */
 	char *map = NULL;
-
+	int filesize = 4194304;
 	/*
 	 * open file, handle errors, create it if necessary.
 	 * should end up with map referring to the filesystem.
 	 */
-	int *fp = open(file, O_RDWR | O_CREAT);	
-	
-	map = mmap((caddr_t)0, 4194304, PROT_READ | PROT_WRITE, MAP_SHARED, fp, 0);
 
-	if (map == -1){
-	  perror("Error mapping file (mmap)");
-	  exit(1);
-	}
-		     
+    initializeFileSystem(file);
+
+    fp = open(file, O_RDWR);
+    map = mmap(NULL, filesize, PROT_READ|PROT_WRITE, MAP_SHARED, fp, 0);
+
+    if (map == MAP_FAILED){
+        printf("map error\n");
+        exit(-1);;
+    }
+
+    close(fp);
+
 	/* You will probably want other variables here for tracking purposes */
 
+    verifyFileSystem(file);
 
 	/*
 	 * Accept commands, calling accessory functions unless
@@ -66,7 +128,7 @@ void filesystem(char *file)
 		size_t length = strlen(buffer);
 		if(length == 0)
 		{
-			continue;
+            continue;
 		}
 		if(buffer[length-1] == '\n')
 		{
@@ -86,7 +148,7 @@ void filesystem(char *file)
 		{
 			if(isdigit(buffer[5]))
 			{
-				//dump(stdout, atoi(buffer + 5));
+				dump(file, atoi(buffer + 5));
 			}
 			else
 			{
@@ -99,7 +161,7 @@ void filesystem(char *file)
 		}
 		else if(!strncmp(buffer, "usage", 5))
 		{
-			//usage();
+			usage(file);
 		}
 		else if(!strncmp(buffer, "pwd", 3))
 		{
@@ -108,6 +170,18 @@ void filesystem(char *file)
 		else if(!strncmp(buffer, "cd ", 3))
 		{
 			//cd(buffer+3);
+			int nextIndex;
+            lseek(fp, dataStart + currentDirectory * 512, SEEK_SET);
+            struct directoryPage currentDir;
+            read(fp, &currentDir, sizeof(currentDir));
+            //int numberOfDirectories = sizeof(currentDir.directories) / sizeof(struct directoryEntry);
+            for (int i = 0; i < 50; i++){
+                if ( strcmp(currentDir.directories[i].name, buffer) == 0){
+                    nextIndex = currentDir.directories[i].index;
+                    break;
+                }
+            }
+            currentDirectory = nextIndex;
 		}
 		else if(!strncmp(buffer, "ls", 2))
 		{
@@ -115,6 +189,17 @@ void filesystem(char *file)
 		}
 		else if(!strncmp(buffer, "mkdir ", 6))
 		{
+		    int freeBlock = getNextFreeBlock();
+            setBlockInUse(freeBlock);
+
+		    struct directoryPage directory;
+		    strcpy(directory.name, buffer);
+		    directory.thisDirectory = freeBlock;
+		    directory.previousDirectory = currentDirectory;
+
+            lseek(fp, dataStart + freeBlock / 8 * 512, SEEK_SET);
+            write(fp, &directory, 512);
+
 			//mkdir(buffer+6);
 		}
 		else if(!strncmp(buffer, "cat ", 4))
@@ -232,4 +317,113 @@ int main(int argc, char **argv)
 
 	filesystem(argv[1]);
 	return 0;
+}
+
+void initializeFileSystem(char* file){
+    //Set global variables
+    lastAllocated = 0;
+    fatStart = 512;
+    rootDirectory = fatStart + 126 * 512;
+    dataStart = rootDirectory + 512;
+    currentDirectory = fatStart; //TODO: is root directory first entry in FAT?
+
+    int filesize = 4194304;
+    int i;
+
+    fp = open(file, O_RDWR | O_CREAT);
+
+    if (fp < 0){
+        printf("open error\n");
+		exit(-1);
+	}
+
+    ftruncate(fp, filesize);
+    struct rootSector root_sector;
+    root_sector.FATroot = 512;
+    root_sector.rootDirectory = 512 + 512 * 63;
+
+    write(fp, &root_sector, sizeof(root_sector));
+    lseek(fp, 513, SEEK_SET);
+
+    struct fatEntry fat_entry;
+
+
+    for (i = 0; i < 8129 - 63 * 2; i++){
+        write(fp, &fat_entry, sizeof(fat_entry));
+        lseek(fp, 512 + (i + 1) * sizeof(fat_entry), SEEK_SET);
+    }
+
+    struct directoryEntry directory_entry;
+    printf("%ld\n", sizeof(directory_entry));
+    directory_entry.index = 512 + 512 * 63 * 2;
+    directory_entry.name = "root";
+    printf("%ld\n", sizeof(directory_entry));
+
+    lseek(fp, 512 + 512 * 63 * 2, SEEK_SET);
+    write(fp, &directory_entry, sizeof(directory_entry));
+    close(fp);
+}
+
+void usage (char *file)
+{
+    struct rootSector test_sector;
+    char use;
+    int fp = open(file, O_RDWR);
+    read(fp, &test_sector, sizeof(test_sector));
+
+    lseek(fp, test_sector.FATroot, SEEK_SET);
+    int i;
+    int total_file_size = 0;
+    int total_system_size = 0;
+
+    struct fatEntry fat_entry;
+    for (i = 0; i < 8129 - 63 * 2; i++){
+        read(fp, &fat_entry, sizeof(fat_entry));
+        if (fat_entry.use == 1){
+            total_file_size += 512;
+        }else{
+            total_file_size += 0;
+        }
+        lseek(fp, 512 + (i + 1) * sizeof(fat_entry), SEEK_SET);
+    }
+
+    close(fp);
+    fp = open(file, O_RDWR);
+    for (i = 0; i < 4194304; i++){
+        read(fp, &use, sizeof(use));
+        if (use != '\0'){
+            total_system_size += 1;
+        }
+        lseek(fp, i + 1, SEEK_SET);
+    }
+
+    printf("Total actual files used: %d byte\n", total_file_size);
+    printf("Total filesystem used: %d byte\n", total_system_size);
+}
+
+void dump(char *file, int pagenumber)
+{
+    unsigned char out[512];
+    int i;
+    int fp = open(file, O_RDWR);
+
+    if (pagenumber < 0 || pagenumber > 8192){
+        fat_error("ERROR: page outside filesystem!");
+    }
+
+    lseek(fp, 0 + 512 * pagenumber, SEEK_SET);
+
+    read(fp, &out, sizeof(out));
+
+    for(i = 0; i < 512; i++){
+        if (i > 0 && i % 16 == 0){
+           printf("    ");
+        }
+
+        if (i > 0 && i % 32 == 0){
+           printf("\n");
+        }
+        printf("%02x ", out[i]);
+    }
+    printf("\n");
 }
